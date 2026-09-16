@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thông số kỹ thuật motor</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#fff;color:#111}
+header{position:sticky;top:0;z-index:5;background:white;border-bottom:1px solid #ddd;padding:12px}
+h1{margin:0 0 10px;text-align:center;font-size:22px}.bar{display:flex;gap:8px;flex-wrap:wrap;max-width:1200px;margin:auto}
+button,input{font:inherit}button{border:0;border-radius:8px;padding:9px 12px;background:#fff;color:#111;border:1px solid #aaa;cursor:pointer}
+button.secondary{background:#fff;color:#111;border:1px solid #aaa}input[type=search]{flex:1;min-width:180px;padding:9px;border:1px solid #bbb;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:12px;max-width:1400px;margin:auto}
+.card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px;min-height:245px;cursor:pointer;box-shadow:0 1px 3px #0001}
+.card:hover{border-color:#777}.num{font-weight:bold;text-align:center;margin-bottom:7px}
+.spec{display:grid;grid-template-columns:90px 10px 1fr;gap:4px 2px;font-size:13px}.spec .lab{text-align:left}.spec .colon{text-align:center}.value{overflow-wrap:anywhere}
+.thumb{width:100%;height:95px;object-fit:contain;border:1px dashed #bbb;border-radius:7px;margin-top:7px}
+.hidden{display:none!important}
+#papers{max-width:1100px;margin:auto;padding:12px}.paperWrap{background:#ddd;padding:10px;border-radius:10px}
+#paperCanvas{display:block;width:100%;height:auto;background:white;border:1px solid #aaa;touch-action:none}
+.paperbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:15px;z-index:10}
+.modal.show{display:flex}.box{background:#fff;border-radius:12px;padding:16px;width:min(600px,100%);max-height:92vh;overflow:auto}
+.formrow{display:grid;grid-template-columns:120px 12px 1fr;gap:4px;margin:7px 0;align-items:center}.formrow label{text-align:left}.formrow span{text-align:center}
+.formrow input,.formrow textarea{width:100%;padding:8px;border:1px solid #bbb;border-radius:7px}.formrow textarea{min-height:65px;resize:vertical}
+.preview{max-width:100%;max-height:180px;display:block;margin:8px auto;border-radius:8px}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.small{font-size:12px;color:#666}
+</style>
+</head>
+<body>
+<header>
+<h1>⚙️ THÔNG SỐ KỸ THUẬT MOTOR</h1>
+<div class="bar">
+<button id="motorTab">⚙️ Motor</button><button id="paperTab" class="secondary">📄 100 trang giấy</button>
+<input id="search" type="search" placeholder="Tìm motor...">
+</div>
+</header>
+
+<main id="motorPage"><div id="grid" class="grid"></div></main>
+
+<section id="paperPage" class="hidden">
+<div id="papers">
+<div class="paperbar">
+<button id="prev">← Trang trước</button><b id="pageTitle">Trang 1 / 100</b><button id="next">Trang sau →</button>
+<button id="clear" class="secondary">Xóa trang</button>
+<button id="savePaper">💾 Lưu</button>
+<label><button type="button">📷 Chụp ảnh</button><input id="paperPhoto" type="file" accept="image/*" capture="environment" class="hidden"></label>
+<button id="copyPaper" class="secondary">📋 Sao chép</button>
+</div>
+<div class="paperWrap"><canvas id="paperCanvas" width="1200" height="1600"></canvas></div>
+<p class="small">Có thể vẽ/kẻ trực tiếp trên trang. Ảnh chụp có thể đưa vào trang, sau đó lưu để mọi người cùng xem.</p>
+</div>
+</section>
+
+<div id="modal" class="modal">
+<div class="box">
+<h2 id="modalTitle">Motor</h2>
+<div id="form"></div>
+<div id="photoArea"></div>
+<div class="actions">
+<button id="saveMotor">💾 Lưu</button>
+<button id="deletePhoto" class="secondary">Xóa ảnh</button>
+<button id="closeModal" class="secondary">Đóng</button>
+</div>
+<p class="small">Ảnh được nén trước khi lưu.</p>
+</div>
+</div>
+
+<script>
+const SUPABASE_URL="https://wrnlazzqhsfitbpruwcb.supabase.co";
+const SUPABASE_KEY="DAN_PUBLISHABLE_ANON_KEY_CUA_BAN_VAO_DAY";
+const db = (SUPABASE_KEY.startsWith("DAN_")) ? null : supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const fields=[
+["ten_motor","Tên MOTOR"],["tua","Tua (P)"],["kieu_dau","Kiểu Đấu"],["a","A"],
+["so_vong","Số Vòng"],["duong_kinh","Ø"],["dai","Dài (cm)"],["rong","Rộng (cm)"],
+["ghi_chu","Ghi chú"],["cong","Cộng"]
+];
+let motors=Array.from({length:1000},(_,i)=>({id:i+1}));
+let currentId=null;
+
+function makeCard(m){
+ const d=document.createElement("div");d.className="card";d.dataset.id=m.id;
+ d.innerHTML='<div class="num">MOTOR '+m.id+'</div><div class="spec">'+fields.map(f=>`<div class="lab">${f[1]}</div><div class="colon">:</div><div class="value">${esc(m[f[0]]||"")}</div>`).join("")+'</div>'+
+ (m.anh?`<img class="thumb" src="${m.anh}" alt="Ảnh motor ${m.id}">`:"")+
+ '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button type="button" class="cameraBtn">📷 Chụp ảnh</button></div>';
+ d.onclick=e=>{if(!e.target.closest(".cameraBtn"))openMotor(m.id)};
+ d.querySelector(".cameraBtn").onclick=async e=>{
+   e.stopPropagation();
+   const inp=document.createElement("input");inp.type="file";inp.accept="image/*";inp.capture="environment";
+   inp.onchange=async ev=>{if(!ev.target.files[0])return;m.anh=await compress(ev.target.files[0]);if(db){const {error}=await db.from("motors").upsert(m,{onConflict:"id"});if(error){alert("Lỗi lưu ảnh: "+error.message);return}}render()};
+   inp.click();
+ };
+ return d;
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function render(){
+ const q=document.getElementById("search").value.toLowerCase().trim(),g=document.getElementById("grid");g.innerHTML="";
+ motors.filter(m=>!q||fields.some(f=>String(m[f[0]]||"").toLowerCase().includes(q))||String(m.id).includes(q)).forEach(m=>g.appendChild(makeCard(m)));
+}
+async function loadMotors(){
+ if(!db){render();return}
+ const {data,error}=await db.from("motors").select("*").order("id");
+ if(!error&&data)data.forEach(x=>{if(x.id>=1&&x.id<=1000)motors[x.id-1]={...motors[x.id-1],...x}});
+ render();
+}
+function openMotor(id){
+ currentId=id;const m=motors[id-1];document.getElementById("modalTitle").textContent="MOTOR "+id;
+ document.getElementById("form").innerHTML=fields.map(f=>`<div class="formrow"><label>${f[1]}</label><span>:</span><input data-key="${f[0]}" value="${esc(m[f[0]]||"")}"></div>`).join("");
+ document.getElementById("photoArea").innerHTML=m.anh?`<img class="preview" src="${m.anh}">`:"<p class='small'>Chưa có ảnh.</p>";
+ document.getElementById("modal").classList.add("show");
+}
+async function compress(file){
+ return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{let w=im.width,h=im.height,max=1200;if(w>max){h*=max/w;w=max}if(h>max){w*=max/h;h=max}const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(im,0,0,w,h);resolve(c.toDataURL("image/jpeg",.72))};im.onerror=reject;im.src=r.result};r.onerror=reject;r.readAsDataURL(file)})
+}
+document.getElementById("saveMotor").onclick=async()=>{
+ const m=motors[currentId-1];document.querySelectorAll("#form input").forEach(i=>m[i.dataset.key]=i.value);
+ if(db){const {error}=await db.from("motors").upsert(m,{onConflict:"id"});if(error){alert("Lỗi lưu: "+error.message);return}}
+ document.getElementById("modal").classList.remove("show");render();
+};
+document.getElementById("closeModal").onclick=()=>document.getElementById("modal").classList.remove("show");
+document.getElementById("deletePhoto").onclick=async()=>{if(!currentId)return;motors[currentId-1].anh=null;if(db)await db.from("motors").update({anh:null}).eq("id",currentId);openMotor(currentId);render()};
+const photoInput=document.createElement("input");photoInput.type="file";photoInput.accept="image/*";photoInput.capture="environment";photoInput.className="hidden";document.getElementById("photoArea").appendChild(photoInput);
+document.getElementById("photoArea").onclick=e=>{if(e.target.tagName==="P"||e.target.tagName==="DIV")photoInput.click()};
+photoInput.onchange=async e=>{if(e.target.files[0]){motors[currentId-1].anh=await compress(e.target.files[0]);openMotor(currentId)}};
+
+document.getElementById("search").oninput=render;
+document.getElementById("motorTab").onclick=()=>{motorPage.classList.remove("hidden");paperPage.classList.add("hidden")};
+document.getElementById("paperTab").onclick=()=>{motorPage.classList.add("hidden");paperPage.classList.remove("hidden");loadPaper()};
+const canvas=document.getElementById("paperCanvas"),ctx=canvas.getContext("2d");ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);
+let page=1,drawing=false;
+function pos(e){const r=canvas.getBoundingClientRect(),p=e.touches?e.touches[0]:e;return{x:(p.clientX-r.left)*canvas.width/r.width,y:(p.clientY-r.top)*canvas.height/r.height}}
+function start(e){drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);e.preventDefault()}
+function move(e){if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();e.preventDefault()}
+function end(){drawing=false}
+canvas.addEventListener("mousedown",start);canvas.addEventListener("mousemove",move);canvas.addEventListener("mouseup",end);canvas.addEventListener("mouseleave",end);
+canvas.addEventListener("touchstart",start,{passive:false});canvas.addEventListener("touchmove",move,{passive:false});canvas.addEventListener("touchend",end);
+function label(){document.getElementById("pageTitle").textContent=`Trang ${page} / 100`}
+async function loadPaper(){label();ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);if(!db)return;const {data}=await db.from("papers").select("content").eq("id",page).maybeSingle();if(data?.content){const im=new Image();im.onload=()=>ctx.drawImage(im,0,0,canvas.width,canvas.height);im.src=data.content}}
+document.getElementById("prev").onclick=async()=>{if(page>1){page--;await loadPaper()}};
+document.getElementById("next").onclick=async()=>{if(page<100){page++;await loadPaper()}};
+document.getElementById("clear").onclick=()=>{ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height)};
+document.getElementById("savePaper").onclick=async()=>{if(!db){alert("Chưa nhập Publishable/anon key Supabase.");return}const content=canvas.toDataURL("image/jpeg",.75);const {error}=await db.from("papers").upsert({id:page,content},{onConflict:"id"});alert(error?"Lỗi lưu: "+error.message:"Đã lưu trang "+page)};
+document.getElementById("paperPhoto").onchange=async e=>{if(!e.target.files[0])return;const data=await compress(e.target.files[0]);const im=new Image();im.onload=()=>{let w=canvas.width,h=canvas.height,scale=Math.min(w/im.width,h/im.height);let iw=im.width*scale,ih=im.height*scale;ctx.drawImage(im,(w-iw)/2,(h-ih)/2,iw,ih)};im.src=data;e.target.value=""};
+document.getElementById("copyPaper").onclick=async()=>{try{const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);alert("Đã sao chép trang")}catch(e){alert("Trình duyệt không hỗ trợ sao chép ảnh trực tiếp.")}};
+loadMotors();
+</script>
+</body>
+</html>
